@@ -1,0 +1,56 @@
+{
+    "name": "NicoIIT/esphome-ble_adv_proxy",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "runArgs": [
+        // "--group-add=20", // dialout group, needed to access USB Devices
+        // "--device=/dev/ttyUSB0" // USB Device access, to be added / uncommented / changed IF you have a USB Device connected
+    ],
+    "mounts": [
+        // External configs, as you can also use esphome directly to handle your configs
+        "source=/data/esphome/config,target=/config,type=bind,consistency=cached"
+    ],
+    "remoteUser": "esphome",
+    "containerEnv": {
+        "ESPHOME_DASHBOARD_USE_PING": "1",
+        "PLATFORMIO_CORE_DIR": "${containerWorkspaceFolder}/.cache/.pio",
+        "ESPHOME_DATA_DIR": "${containerWorkspaceFolder}/.cache/data",
+        "GIT_EDITOR": "code --wait"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "charliermarsh.ruff",
+                "github.vscode-pull-request-github",
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ryanluker.vscode-coverage-gutters",
+                "ms-vscode.cpptools"
+            ],
+            "settings": {
+                "files.eol": "\n",
+                "editor.tabSize": 4,
+                "editor.formatOnPaste": true,
+                "editor.formatOnSave": true,
+                "editor.formatOnType": false,
+                "files.trimTrailingWhitespace": true,
+                "python.analysis.typeCheckingMode": "basic",
+                "python.analysis.autoImportCompletions": true,
+                "python.defaultInterpreterPath": "/usr/bin/python3",
+                "python.analysis.diagnosticSeverityOverrides": {
+                    "reportArgumentType": "none"
+                },
+                "python.analysis.extraPaths": [
+                    "/esphome"
+                ],
+                "[python]": {
+                    "editor.defaultFormatter": "charliermarsh.ruff"
+                },
+                "ruff.configuration": "/esphome/pyproject.toml",
+                //"explorer.excludeGitIgnore": true,
+                "C_Cpp.clang_format_style": "file:/esphome/.clang-format"
+            }
+        }
+    }
+}

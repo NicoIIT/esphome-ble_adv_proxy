@@ -1,0 +1,12 @@
+logger:
+  level: INFO
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+esphome:
+  name: esp32-idf
+
+ble_adv_proxy:

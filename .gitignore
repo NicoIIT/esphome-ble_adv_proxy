@@ -1,0 +1,6 @@
+# Python cache
+__pycache__
+
+# build files
+.cache
+.vscode
