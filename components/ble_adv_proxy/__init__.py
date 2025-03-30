@@ -3,9 +3,8 @@ from esphome.components.esp32_ble import CONF_BLE_ID, ESP32BLE
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
-AUTO_LOAD = ["esp32_ble"]
+AUTO_LOAD = ["esp32_ble", "esp32_ble_tracker", "api"]
 DEPENDENCIES = ["esp32", "api"]
-CONFLICTS_WITH = ["ble_adv_handler"]
 MULTI_CONF = False
 
 bleadvproxy_ns = cg.esphome_ns.namespace("ble_adv_proxy")
