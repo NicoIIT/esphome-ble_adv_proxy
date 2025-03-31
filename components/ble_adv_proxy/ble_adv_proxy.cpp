@@ -18,28 +18,51 @@ static constexpr const char *CONF_MAC = "mac";
 static constexpr const char *CONF_ADV_EVT = "adv_recv_event";
 static constexpr const char *CONF_PUB_SVC = "publish_adv_svc";
 
+static constexpr const uint32_t SCAN_DUPE_DURATION = 60 * 1000;
+static constexpr const uint32_t EMIT_DUPE_DURATION = 10 * 1000;
+static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL = 60 * 1000;
+static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL_SHORT = 3 * 1000;
+static constexpr const uint8_t DISCOVERY_EMIT_NB_SHORT = 10;
+
+BleAdvParam::BleAdvParam(const std::string &hex_string, uint32_t duration)
+    : duration_(duration), len_(std::min(MAX_PACKET_LEN, hex_string.size() / 2)) {
+  esphome::parse_hex(hex_string, this->buf_, this->len_);
+}
+
+BleAdvParam::BleAdvParam(const uint8_t *buf, size_t len, uint32_t duration)
+    : duration_(duration), len_(std::min(MAX_PACKET_LEN, len)) {
+  std::copy(buf, buf + this->len_, this->buf_);
+}
+
 void BleAdvProxy::setup() {
   register_service(&BleAdvProxy::on_advertise, ADV_SVC, {CONF_RAW, CONF_DURATION});
   this->scan_result_lock_ = xSemaphoreCreateMutex();
 }
 
 void BleAdvProxy::on_advertise(std::string raw, float duration) {
-  BleAdvParam param;
-  param.len_ = std::min(MAX_PACKET_LEN, raw.size() / 2);
-  esphome::parse_hex(raw, param.buf_, param.len_);
-  param.duration_ = duration;
-  ESP_LOGD(TAG, "send adv - %s", esphome::format_hex_pretty(param.buf_, param.len_).c_str());
-  this->send_packets_.emplace_back(std::move(param));
+  ESP_LOGD(TAG, "send adv - %s", raw.c_str());
+  this->send_packets_.emplace_back(raw, duration);
+  // Prevent this packet from being re sent to HA host in case re received
+  this->secure_add_recv_packet(BleAdvParam(raw, millis() + EMIT_DUPE_DURATION));
+}
+
+void BleAdvProxy::secure_add_recv_packet(BleAdvParam &&packet) {
+  if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
+    this->recv_packets_.emplace_back(std::move(packet));
+    xSemaphoreGive(this->scan_result_lock_);
+  } else {
+    ESP_LOGW(TAG, "evt - failed to take lock");
+  }
 }
 
 void BleAdvProxy::on_raw_recv(const BleAdvParam &param) {
-  ESP_LOGD(TAG, "recv raw - %s", esphome::format_hex_pretty(param.buf_, param.len_).c_str());
+  std::string raw = esphome::format_hex(param.buf_, param.len_);
+  ESP_LOGD(TAG, "recv raw - %s", raw.c_str());
   if (!this->is_connected()) {
     ESP_LOGD(TAG, "No clients connected to API server, received adv ignored.");
     return;
   }
-
-  this->fire_homeassistant_event(ADV_RECV_EVENT, {{CONF_RAW, esphome::format_hex(param.buf_, param.len_)}});
+  this->fire_homeassistant_event(ADV_RECV_EVENT, {{CONF_RAW, std::move(raw)}});
 }
 
 void BleAdvProxy::setup_max_tx_power() {
@@ -85,7 +108,6 @@ void BleAdvProxy::send_discovery_event() {
                                                         {CONF_MAC, get_mac()},
                                                         {CONF_NAME, App.get_name()},
                                                         {CONF_PUB_SVC, build_svc_name(ADV_SVC)}};
-
   this->fire_homeassistant_event(DISCOVERY_EVENT, KV);
 }
 
@@ -98,16 +120,16 @@ void BleAdvProxy::loop() {
   // Handle discovery
   if (!this->api_was_connected_ && this->is_connected()) {
     // Reconnection occured: setup discovery in a few seconds
-    this->next_discovery_ = millis() + 3 * 1000;
-    this->nb_short_sent_ = 10;
+    this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL_SHORT;
+    this->nb_short_sent_ = DISCOVERY_EMIT_NB_SHORT;
   }
   this->api_was_connected_ = this->is_connected();
   if (this->api_was_connected_ && this->next_discovery_ < millis()) {
     if (this->nb_short_sent_ > 0) {
       this->nb_short_sent_ -= 1;
-      this->next_discovery_ = millis() + 3 * 1000;
+      this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL_SHORT;
     } else {
-      this->next_discovery_ = millis() + 60 * 1000;
+      this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL;
     }
     this->send_discovery_event();
   }
@@ -143,7 +165,7 @@ void BleAdvProxy::loop() {
       this->setup_max_tx_power();
       ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ble_gap_config_adv_data_raw(packet.buf_, packet.len_));
       ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ble_gap_start_advertising(&(this->adv_params_)));
-      this->adv_stop_time_ = millis() + this->send_packets_.front().duration_;
+      this->adv_stop_time_ = millis() + packet.duration_;
     }
   } else {
     // Packet is being advertised, stop advertising and remove packet
@@ -159,16 +181,8 @@ void BleAdvProxy::loop() {
 // We only gather directly the raw events
 void BleAdvProxy::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
   if (event == ESP_GAP_BLE_SCAN_RESULT_EVT && param->scan_rst.adv_data_len <= MAX_PACKET_LEN) {
-    BleAdvParam packet;
-    packet.len_ = param->scan_rst.adv_data_len;
-    std::copy(param->scan_rst.ble_adv, param->scan_rst.ble_adv + packet.len_, packet.buf_);
-    packet.duration_ = millis() + 60 * 1000;
-    if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
-      this->recv_packets_.emplace_back(std::move(packet));
-      xSemaphoreGive(this->scan_result_lock_);
-    } else {
-      ESP_LOGW(TAG, "evt - failed to take lock");
-    }
+    this->secure_add_recv_packet(
+        BleAdvParam(param->scan_rst.ble_adv, param->scan_rst.adv_data_len, millis() + SCAN_DUPE_DURATION));
   }
 }
 

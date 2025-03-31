@@ -16,7 +16,8 @@ static constexpr size_t MAX_PACKET_LEN = 31;
 
 class BleAdvParam {
  public:
-  BleAdvParam() {};
+  BleAdvParam(const std::string &hex_string, uint32_t duration);
+  BleAdvParam(const uint8_t *buf, size_t len, uint32_t duration);
   BleAdvParam(BleAdvParam &&) = default;
   BleAdvParam &operator=(BleAdvParam &&) = default;
 
@@ -40,6 +41,7 @@ class BleAdvProxy : public Component,
   void set_use_max_tx_power(bool use_max_tx_power) { this->use_max_tx_power_ = use_max_tx_power; }
   void on_advertise(std::string raw, float duration);
   void on_raw_recv(const BleAdvParam &param);
+  void secure_add_recv_packet(BleAdvParam &&packet);
 
  protected:
   /**
