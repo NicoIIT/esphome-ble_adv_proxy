@@ -18,7 +18,7 @@ static constexpr const char *CONF_MAC = "mac";
 static constexpr const char *CONF_ADV_EVT = "adv_recv_event";
 static constexpr const char *CONF_PUB_SVC = "publish_adv_svc";
 
-static constexpr const uint32_t SCAN_DUPE_DURATION = 60 * 1000;
+static constexpr const uint32_t SCAN_DUPE_DURATION = 10 * 1000;
 static constexpr const uint32_t EMIT_DUPE_DURATION = 10 * 1000;
 static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL = 60 * 1000;
 static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL_SHORT = 3 * 1000;
@@ -35,7 +35,7 @@ BleAdvParam::BleAdvParam(const uint8_t *buf, size_t len, uint32_t duration)
 }
 
 void BleAdvProxy::setup() {
-  register_service(&BleAdvProxy::on_advertise, ADV_SVC, {CONF_RAW, CONF_DURATION});
+  this->register_service(&BleAdvProxy::on_advertise, ADV_SVC, {CONF_RAW, CONF_DURATION});
   this->scan_result_lock_ = xSemaphoreCreateMutex();
 }
 
@@ -154,6 +154,8 @@ void BleAdvProxy::loop() {
     if (idx == this->dupe_packets_.end()) {
       this->on_raw_recv(param);
       this->dupe_packets_.emplace_back(std::move(param));
+    } else {
+      idx->duration_ = param.duration_;  // Update the deletion time
     }
   }
 
