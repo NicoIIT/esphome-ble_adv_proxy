@@ -5,6 +5,7 @@
     },
     "runArgs": [
         //"--device=/dev/ttyUSBO", // USB Device access, to be added / uncommented / changed IF you have a USB Device connected
+        //"--device=/dev/ttyACM0", // USB Device access, to be added / uncommented / changed IF you have a USB Device connected
         "--group-add=20" // dialout group, needed to access USB Devices
     ],
     "mounts": [

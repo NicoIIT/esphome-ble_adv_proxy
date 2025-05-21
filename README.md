@@ -4,38 +4,19 @@ This component transforms your ESP32 into a bluetooth adv proxy that can be used
 
 Contrarily to the existing bluetooth_proxy component, this component is handling Raw Advertising exchanges in both directions which is mandatory in order to control devices using BLE Advertising.
 
-It can be used on top of an existing standard Bluetooth ESPHome Proxy by adding this component to your existing config.
-
-Please note it is highly recommended to use the `esp-idf` framework for a better co-existence in between Wifi and BLE Scan.
+The easiest solution to build an ESPHome based binary including this component is to add this feature to an existing [standard Bluetooth ESPHome Proxy](https://esphome.io/components/bluetooth_proxy.html):
+1. Create your standard Bluetooth ESPHome proxy following the standard guide, and have it available in HA. **No help will be provided on this part, you can find tons of help and tutorials on the net**
+2. Add this to the yaml config:
 
 ```yaml
-(...)
-esp32:
-  board: esp32dev
-  framework:
-    type: esp-idf
-
-(...)
-esp32_ble_tracker:
-  scan_parameters:
-    # We currently use the defaults to ensure Bluetooth
-    # can co-exist with WiFi In the future we may be able to
-    # enable the built-in coexistence logic in ESP-IDF
-    active: true
-
-bluetooth_proxy:
-  active: true
-
-# Added for ble_adv_proxy
 ble_adv_proxy:
+  use_max_tx_power: true # see below, remove in case of build issues
 
 external_components:
   source: github://NicoIIT/esphome-ble_adv_proxy
 ```
 
-It can also be used standalone without bluetooth_proxy or esp32_ble_tracker, still the `api` component is mandatory.
-
-It can be used with ble_adv_manager / ble_adv_remote / ble_adv_controller, this will ease migrations from those components to the HA integration.
+It can also be used with an existing config including ble_adv_manager / ble_adv_remote / ble_adv_controller, this will ease migrations from those components to the HA integration.
 
 ## Variables
 The following variables are available:
@@ -47,8 +28,8 @@ The following variables are available:
 [23:09:41][W][esp32_ble_tracker:125]: Too many BLE events to process. Some devices may not show up.
 [23:09:41][W][esp32_ble_tracker:125]: Too many BLE events to process. Some devices may not show up.
 ```
-The `esp32_ble_tracker` is forced included by this component in order to handle the scanning part.
-Still the default scan parameters defined in this component may not be accurate to handle the needs of our devices that publish a LOT of Advertising messgaes in a short amount of time. You can decrease them in order to get ride of the warnings by defining the esp32_ble_tracker and its scan parameters:
+The `esp32_ble_tracker` is forced included by this component in order to handle the scanning part, it is also included in default Bluetooth Proxy config.
+Still the default scan parameters defined in this component may not be accurate to handle the needs of our devices that publish a LOT of Advertising messages in a short amount of time. You can decrease them in order to get ride of the warnings by defining the esp32_ble_tracker and its scan parameters:
 
 ```yaml
 esp32_ble_tracker:

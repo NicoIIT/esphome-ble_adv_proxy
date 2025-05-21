@@ -4,6 +4,18 @@
 #include <esp_err.h>
 #include <esp_bt_device.h>
 
+#ifdef ESP_PWR_LVL_P20
+#define MAX_TX_POWER ESP_PWR_LVL_P20
+#elif ESP_PWR_LVL_P18
+#define MAX_TX_POWER ESP_PWR_LVL_P18
+#elif ESP_PWR_LVL_P15
+#define MAX_TX_POWER ESP_PWR_LVL_P15
+#elif ESP_PWR_LVL_P12
+#define MAX_TX_POWER ESP_PWR_LVL_P12
+#else
+#define MAX_TX_POWER ESP_PWR_LVL_P9
+#endif
+
 namespace esphome {
 namespace ble_adv_proxy {
 
@@ -66,9 +78,6 @@ void BleAdvProxy::on_raw_recv(const BleAdvParam &param) {
 }
 
 void BleAdvProxy::setup_max_tx_power() {
-  // The standard interfaces for esp32 are limited to ESP_PWR_LVL_P9, whereas some other interfaces for ESP32-C2 / C3 /
-  // .. are able to go up to ESP_PWR_LVL_P20. This function will simply try to setup the max value by increasing by 1
-  // each time, and checking if it gives an error
   if (this->max_tx_power_setup_done_ || !this->use_max_tx_power_) {
     return;
   }
@@ -76,15 +85,14 @@ void BleAdvProxy::setup_max_tx_power() {
   esp_power_level_t lev_init = esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_ADV);
   ESP_LOGD(TAG, "Advertising TX Power enum value (NOT dBm) before max setup: %d", lev_init);
 
-  esp_err_t ret_code = ESP_OK;
-  esp_power_level_t lev_code = ESP_PWR_LVL_P9;
-  while ((ret_code == ESP_OK) && (lev_code < 0xFF)) {
-    ret_code = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, lev_code);
-    lev_code = (esp_power_level_t) ((uint8_t) (lev_code + 1));
+  if (lev_init != MAX_TX_POWER) {
+    ESP_LOGI(TAG, "Advertising TX Power setup attempt to: %d", MAX_TX_POWER);
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
+    esp_power_level_t lev_final = esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_ADV);
+    ESP_LOGI(TAG, "Advertising TX Power enum value (NOT dBm) after max setup: %d", lev_final);
+  } else {
+    ESP_LOGI(TAG, "Advertising TX Power already at max: %d", MAX_TX_POWER);
   }
-
-  esp_power_level_t lev_final = esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_ADV);
-  ESP_LOGD(TAG, "Advertising TX Power enum value (NOT dBm) after max setup: %d", lev_final);
 
   this->max_tx_power_setup_done_ = true;
 }
