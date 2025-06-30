@@ -30,7 +30,7 @@ class BleAdvParam {
   BleAdvProxy:
  */
 class BleAdvProxy : public Component,
-                    public esp32_ble::GAPEventHandler,
+                    public esp32_ble::GAPScanEventHandler,
                     public Parented<esp32_ble::ESP32BLE>,
                     public api::CustomAPIDevice {
  public:
@@ -39,9 +39,10 @@ class BleAdvProxy : public Component,
   void loop() override;
 
   void set_use_max_tx_power(bool use_max_tx_power) { this->use_max_tx_power_ = use_max_tx_power; }
+  void on_setup(float ign_duration, std::vector<std::string> ignored_advs);
   void on_advertise(std::string raw, float duration);
   void on_raw_recv(const BleAdvParam &param);
-  void secure_add_recv_packet(BleAdvParam &&packet);
+  bool check_add_dupe_packet(BleAdvParam &&packet);
 
  protected:
   /**
@@ -65,10 +66,12 @@ class BleAdvProxy : public Component,
   bool max_tx_power_setup_done_ = false;
   void setup_max_tx_power();
 
+  uint32_t dupe_ignore_duration_ = 20000;
+
   /**
     Listening to ADV
    */
-  void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
+  void gap_scan_event_handler(const esp32_ble::BLEScanResult &scan_result) override;
   SemaphoreHandle_t scan_result_lock_;
   std::list<BleAdvParam> recv_packets_;
   std::list<BleAdvParam> dupe_packets_;

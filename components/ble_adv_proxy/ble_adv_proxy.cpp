@@ -22,6 +22,9 @@ namespace ble_adv_proxy {
 static constexpr const char *TAG = "ble_adv_proxy";
 static constexpr const char *DISCOVERY_EVENT = "esphome.ble_adv.discovery";
 static constexpr const char *ADV_RECV_EVENT = "esphome.ble_adv.raw_adv";
+static constexpr const char *SETUP_SVC = "setup_svc";
+static constexpr const char *CONF_IGN_ADVS = "ignored_advs";
+static constexpr const char *CONF_IGN_DURATION = "ignored_duration";
 static constexpr const char *ADV_SVC = "adv_svc";
 static constexpr const char *CONF_RAW = "raw";
 static constexpr const char *CONF_DURATION = "duration";
@@ -30,8 +33,6 @@ static constexpr const char *CONF_MAC = "mac";
 static constexpr const char *CONF_ADV_EVT = "adv_recv_event";
 static constexpr const char *CONF_PUB_SVC = "publish_adv_svc";
 
-static constexpr const uint32_t SCAN_DUPE_DURATION = 10 * 1000;
-static constexpr const uint32_t EMIT_DUPE_DURATION = 10 * 1000;
 static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL = 60 * 1000;
 static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL_SHORT = 3 * 1000;
 static constexpr const uint8_t DISCOVERY_EMIT_NB_SHORT = 10;
@@ -47,24 +48,39 @@ BleAdvParam::BleAdvParam(const uint8_t *buf, size_t len, uint32_t duration)
 }
 
 void BleAdvProxy::setup() {
+  this->register_service(&BleAdvProxy::on_setup, SETUP_SVC, {CONF_IGN_DURATION, CONF_IGN_ADVS});
   this->register_service(&BleAdvProxy::on_advertise, ADV_SVC, {CONF_RAW, CONF_DURATION});
   this->scan_result_lock_ = xSemaphoreCreateMutex();
+}
+
+void BleAdvProxy::on_setup(float ign_duration, std::vector<std::string> ignored_advs) {
+  this->dupe_ignore_duration_ = ign_duration;
+  for (auto &ignored_adv : ignored_advs) {
+    ESP_LOGI(TAG, "Permanently ignoring ADVs starting with: %s", ignored_adv.c_str());
+    this->check_add_dupe_packet(BleAdvParam(ignored_adv, 0));
+  }
 }
 
 void BleAdvProxy::on_advertise(std::string raw, float duration) {
   ESP_LOGD(TAG, "send adv - %s", raw.c_str());
   this->send_packets_.emplace_back(raw, duration);
   // Prevent this packet from being re sent to HA host in case re received
-  this->secure_add_recv_packet(BleAdvParam(raw, millis() + EMIT_DUPE_DURATION));
+  this->check_add_dupe_packet(BleAdvParam(raw, millis() + this->dupe_ignore_duration_));
 }
 
-void BleAdvProxy::secure_add_recv_packet(BleAdvParam &&packet) {
-  if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
-    this->recv_packets_.emplace_back(std::move(packet));
-    xSemaphoreGive(this->scan_result_lock_);
-  } else {
-    ESP_LOGW(TAG, "evt - failed to take lock");
+bool BleAdvProxy::check_add_dupe_packet(BleAdvParam &&packet) {
+  // Check the recently received advs
+  auto idx = std::find_if(this->dupe_packets_.begin(), this->dupe_packets_.end(), [&](BleAdvParam &p) {
+    return (p.len_ <= packet.len_) && std::equal(p.buf_, p.buf_ + p.len_, packet.buf_);
+  });
+  if (idx != this->dupe_packets_.end()) {
+    if (idx->duration_ > 0) {
+      idx->duration_ = packet.duration_;  // Existing Packet with specified deletion time: Update the deletion time
+    }
+    return false;
   }
+  this->dupe_packets_.emplace_back(std::move(packet));
+  return true;
 }
 
 void BleAdvProxy::on_raw_recv(const BleAdvParam &param) {
@@ -143,7 +159,7 @@ void BleAdvProxy::loop() {
   }
 
   // Cleanup expired packets
-  this->dupe_packets_.remove_if([&](BleAdvParam &p) { return p.duration_ < millis(); });
+  this->dupe_packets_.remove_if([&](BleAdvParam &p) { return p.duration_ > 0 && p.duration_ < millis(); });
 
   // swap packet list to further process it outside of the lock
   std::list<BleAdvParam> new_packets;
@@ -155,15 +171,9 @@ void BleAdvProxy::loop() {
   }
 
   // handle new packets
-  for (auto &param : new_packets) {
-    auto idx = std::find_if(this->dupe_packets_.begin(), this->dupe_packets_.end(), [&](BleAdvParam &p) {
-      return (p.len_ == param.len_) && std::equal(p.buf_, p.buf_ + p.len_, param.buf_);
-    });
-    if (idx == this->dupe_packets_.end()) {
-      this->on_raw_recv(param);
-      this->dupe_packets_.emplace_back(std::move(param));
-    } else {
-      idx->duration_ = param.duration_;  // Update the deletion time
+  for (auto &packet : new_packets) {
+    if (this->check_add_dupe_packet(std::move(packet))) {
+      this->on_raw_recv(this->dupe_packets_.back());
     }
   }
 
@@ -189,10 +199,14 @@ void BleAdvProxy::loop() {
 
 // We let the configuration of the scanning to esp32_ble_tracker, towards with stop / start
 // We only gather directly the raw events
-void BleAdvProxy::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
-  if (event == ESP_GAP_BLE_SCAN_RESULT_EVT && param->scan_rst.adv_data_len <= MAX_PACKET_LEN) {
-    this->secure_add_recv_packet(
-        BleAdvParam(param->scan_rst.ble_adv, param->scan_rst.adv_data_len, millis() + SCAN_DUPE_DURATION));
+void BleAdvProxy::gap_scan_event_handler(const esp32_ble::BLEScanResult &sr) {
+  if (sr.adv_data_len <= MAX_PACKET_LEN) {
+    if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
+      this->recv_packets_.emplace_back(sr.ble_adv, sr.adv_data_len, millis() + this->dupe_ignore_duration_);
+      xSemaphoreGive(this->scan_result_lock_);
+    } else {
+      ESP_LOGW(TAG, "evt - failed to take lock");
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/local/bin/python
 
 """Override ESPHome CLI tool located in /usr/local/bin/esphome.
 

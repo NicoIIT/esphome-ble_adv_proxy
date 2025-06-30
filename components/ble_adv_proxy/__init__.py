@@ -12,12 +12,16 @@ BleAdvProxy = bleadvproxy_ns.class_("BleAdvProxy", cg.Component)
 
 CONF_BLE_ADV_USE_MAX_TX_POWER = "use_max_tx_power"
 
-CONFIG_SCHEMA = cv.Schema(
-    {
-        cv.GenerateID(): cv.declare_id(BleAdvProxy),
-        cv.GenerateID(CONF_BLE_ID): cv.use_id(ESP32BLE),
-        cv.Optional(CONF_BLE_ADV_USE_MAX_TX_POWER, default=False): cv.boolean,
-    }
+CONFIG_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.declare_id(BleAdvProxy),
+            cv.GenerateID(CONF_BLE_ID): cv.use_id(ESP32BLE),
+            cv.Optional(CONF_BLE_ADV_USE_MAX_TX_POWER, default=False): cv.boolean,
+        }
+    ),
+    # Creation of esp32_ble::GAPScanEventHandler
+    cv.require_esphome_version(2025,6,2),
 )
 
 
@@ -27,5 +31,5 @@ async def to_code(config):
     await cg.register_component(var, config)
     cg.add(var.set_use_max_tx_power(config[CONF_BLE_ADV_USE_MAX_TX_POWER]))
     parent = await cg.get_variable(config[CONF_BLE_ID])
-    cg.add(parent.register_gap_event_handler(var))
+    cg.add(parent.register_gap_scan_event_handler(var))
     cg.add(var.set_parent(parent))
