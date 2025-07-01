@@ -39,8 +39,9 @@ class BleAdvProxy : public Component,
   void loop() override;
 
   void set_use_max_tx_power(bool use_max_tx_power) { this->use_max_tx_power_ = use_max_tx_power; }
-  void on_setup(float ign_duration, std::vector<std::string> ignored_advs);
-  void on_advertise(std::string raw, float duration);
+  void on_setup_v0(float ign_duration, std::vector<std::string> ignored_advs);
+  void on_advertise_v0(std::string raw, float duration);
+  void on_advertise_v1(std::string raw, float duration, std::vector<std::string> ignored_advs, float ign_duration);
   void on_raw_recv(const BleAdvParam &param);
   bool check_add_dupe_packet(BleAdvParam &&packet);
 

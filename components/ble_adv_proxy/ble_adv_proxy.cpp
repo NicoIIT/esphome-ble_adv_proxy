@@ -22,16 +22,17 @@ namespace ble_adv_proxy {
 static constexpr const char *TAG = "ble_adv_proxy";
 static constexpr const char *DISCOVERY_EVENT = "esphome.ble_adv.discovery";
 static constexpr const char *ADV_RECV_EVENT = "esphome.ble_adv.raw_adv";
-static constexpr const char *SETUP_SVC = "setup_svc";
+static constexpr const char *SETUP_SVC_V0 = "setup_svc_v0";
 static constexpr const char *CONF_IGN_ADVS = "ignored_advs";
 static constexpr const char *CONF_IGN_DURATION = "ignored_duration";
-static constexpr const char *ADV_SVC = "adv_svc";
+static constexpr const char *ADV_SVC_V0 = "adv_svc";  // legacy name / service
+static constexpr const char *ADV_SVC_V1 = "adv_svc_v1";
 static constexpr const char *CONF_RAW = "raw";
 static constexpr const char *CONF_DURATION = "duration";
 static constexpr const char *CONF_NAME = "name";
 static constexpr const char *CONF_MAC = "mac";
 static constexpr const char *CONF_ADV_EVT = "adv_recv_event";
-static constexpr const char *CONF_PUB_SVC = "publish_adv_svc";
+static constexpr const char *CONF_PUB_SVC = "publish_adv_svc";  // legacy name / service
 
 static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL = 60 * 1000;
 static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL_SHORT = 3 * 1000;
@@ -48,24 +49,39 @@ BleAdvParam::BleAdvParam(const uint8_t *buf, size_t len, uint32_t duration)
 }
 
 void BleAdvProxy::setup() {
-  this->register_service(&BleAdvProxy::on_setup, SETUP_SVC, {CONF_IGN_DURATION, CONF_IGN_ADVS});
-  this->register_service(&BleAdvProxy::on_advertise, ADV_SVC, {CONF_RAW, CONF_DURATION});
+  this->register_service(&BleAdvProxy::on_setup_v0, SETUP_SVC_V0, {CONF_IGN_DURATION, CONF_IGN_ADVS});
+  this->register_service(&BleAdvProxy::on_advertise_v0, ADV_SVC_V0, {CONF_RAW, CONF_DURATION});
+  this->register_service(&BleAdvProxy::on_advertise_v1, ADV_SVC_V1,
+                         {CONF_RAW, CONF_DURATION, CONF_IGN_ADVS, CONF_IGN_DURATION});
   this->scan_result_lock_ = xSemaphoreCreateMutex();
 }
 
-void BleAdvProxy::on_setup(float ign_duration, std::vector<std::string> ignored_advs) {
+void BleAdvProxy::on_setup_v0(float ign_duration, std::vector<std::string> ignored_advs) {
   this->dupe_ignore_duration_ = ign_duration;
+  this->dupe_packets_.clear();
   for (auto &ignored_adv : ignored_advs) {
-    ESP_LOGI(TAG, "Permanently ignoring ADVs starting with: %s", ignored_adv.c_str());
     this->check_add_dupe_packet(BleAdvParam(ignored_adv, 0));
   }
+  ESP_LOGI(TAG, "SETUP - Duplicate ADVs ignored during %ds. %d ADVs Permanently ignored.",
+           this->dupe_ignore_duration_ / 1000, this->dupe_packets_.size());
 }
 
-void BleAdvProxy::on_advertise(std::string raw, float duration) {
+void BleAdvProxy::on_advertise_v0(std::string raw, float duration) {
   ESP_LOGD(TAG, "send adv - %s", raw.c_str());
   this->send_packets_.emplace_back(raw, duration);
   // Prevent this packet from being re sent to HA host in case re received
   this->check_add_dupe_packet(BleAdvParam(raw, millis() + this->dupe_ignore_duration_));
+}
+
+void BleAdvProxy::on_advertise_v1(std::string raw, float duration, std::vector<std::string> ignored_advs,
+                                  float ign_duration) {
+  ESP_LOGD(TAG, "send adv - %s", raw.c_str());
+  this->send_packets_.emplace_back(raw, duration);
+  // Prevent ignored packets from being re sent to HA host in case received
+  for (auto &ignored_adv : ignored_advs) {
+    ESP_LOGD(TAG, "Ignoring ADV for %ds: %s", ign_duration / 1000, ignored_adv.c_str());
+    this->check_add_dupe_packet(BleAdvParam(ignored_adv, ign_duration));
+  }
 }
 
 bool BleAdvProxy::check_add_dupe_packet(BleAdvParam &&packet) {
@@ -131,7 +147,9 @@ void BleAdvProxy::send_discovery_event() {
   static const std::map<std::string, std::string> KV = {{CONF_ADV_EVT, ADV_RECV_EVENT},
                                                         {CONF_MAC, get_mac()},
                                                         {CONF_NAME, App.get_name()},
-                                                        {CONF_PUB_SVC, build_svc_name(ADV_SVC)}};
+                                                        {CONF_PUB_SVC, build_svc_name(ADV_SVC_V0)},  // Legacy
+                                                        {SETUP_SVC_V0, build_svc_name(SETUP_SVC_V0)},
+                                                        {ADV_SVC_V1, build_svc_name(ADV_SVC_V1)}};
   this->fire_homeassistant_event(DISCOVERY_EVENT, KV);
 }
 
@@ -200,7 +218,7 @@ void BleAdvProxy::loop() {
 // We let the configuration of the scanning to esp32_ble_tracker, towards with stop / start
 // We only gather directly the raw events
 void BleAdvProxy::gap_scan_event_handler(const esp32_ble::BLEScanResult &sr) {
-  if (sr.adv_data_len <= MAX_PACKET_LEN) {
+  if (sr.adv_data_len <= MAX_PACKET_LEN && sr.adv_data_len > 0) {
     if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
       this->recv_packets_.emplace_back(sr.ble_adv, sr.adv_data_len, millis() + this->dupe_ignore_duration_);
       xSemaphoreGive(this->scan_result_lock_);
