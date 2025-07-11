@@ -17,13 +17,14 @@ static constexpr size_t MAX_PACKET_LEN = 31;
 class BleAdvParam {
  public:
   BleAdvParam(const std::string &hex_string, uint32_t duration);
-  BleAdvParam(const uint8_t *buf, size_t len, uint32_t duration);
+  BleAdvParam(const uint8_t *buf, size_t len, const esp_bd_addr_t &orig, uint32_t duration);
   BleAdvParam(BleAdvParam &&) = default;
   BleAdvParam &operator=(BleAdvParam &&) = default;
 
   uint32_t duration_{100};
   uint8_t buf_[MAX_PACKET_LEN]{0};
   size_t len_{0};
+  esp_bd_addr_t orig_{0};
 };
 
 /**

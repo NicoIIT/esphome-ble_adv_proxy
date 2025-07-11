@@ -28,6 +28,7 @@ static constexpr const char *CONF_IGN_DURATION = "ignored_duration";
 static constexpr const char *ADV_SVC_V0 = "adv_svc";  // legacy name / service
 static constexpr const char *ADV_SVC_V1 = "adv_svc_v1";
 static constexpr const char *CONF_RAW = "raw";
+static constexpr const char *CONF_ORIGIN = "orig";
 static constexpr const char *CONF_DURATION = "duration";
 static constexpr const char *CONF_NAME = "name";
 static constexpr const char *CONF_MAC = "mac";
@@ -43,9 +44,10 @@ BleAdvParam::BleAdvParam(const std::string &hex_string, uint32_t duration)
   esphome::parse_hex(hex_string, this->buf_, this->len_);
 }
 
-BleAdvParam::BleAdvParam(const uint8_t *buf, size_t len, uint32_t duration)
+BleAdvParam::BleAdvParam(const uint8_t *buf, size_t len, const esp_bd_addr_t &orig, uint32_t duration)
     : duration_(duration), len_(std::min(MAX_PACKET_LEN, len)) {
   std::copy(buf, buf + this->len_, this->buf_);
+  std::copy(orig, orig + ESP_BD_ADDR_LEN, this->orig_);
 }
 
 void BleAdvProxy::setup() {
@@ -99,14 +101,19 @@ bool BleAdvProxy::check_add_dupe_packet(BleAdvParam &&packet) {
   return true;
 }
 
+std::string get_str_mac(const uint8_t *mac) {
+  return str_snprintf("%02X:%02X:%02X:%02X:%02X:%02X", 17, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
 void BleAdvProxy::on_raw_recv(const BleAdvParam &param) {
   std::string raw = esphome::format_hex(param.buf_, param.len_);
-  ESP_LOGD(TAG, "recv raw - %s", raw.c_str());
+  std::string orig = get_str_mac(param.orig_);
+  ESP_LOGD(TAG, "[%s] recv raw - %s", orig.c_str(), raw.c_str());
   if (!this->is_connected()) {
     ESP_LOGD(TAG, "No clients connected to API server, received adv ignored.");
     return;
   }
-  this->fire_homeassistant_event(ADV_RECV_EVENT, {{CONF_RAW, std::move(raw)}});
+  this->fire_homeassistant_event(ADV_RECV_EVENT, {{CONF_RAW, std::move(raw)}, {CONF_ORIGIN, std::move(orig)}});
 }
 
 void BleAdvProxy::setup_max_tx_power() {
@@ -129,11 +136,6 @@ void BleAdvProxy::setup_max_tx_power() {
   this->max_tx_power_setup_done_ = true;
 }
 
-std::string get_mac() {
-  const uint8_t *mac = esp_bt_dev_get_address();
-  return str_snprintf("%02X:%02X:%02X:%02X:%02X:%02X", 17, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-}
-
 std::string build_svc_name(const char *svc_name) {
   // same as done in home assistant core 'esphome.manager.build_service_name':
   // https://github.com/home-assistant/core/blob/dev/homeassistant/components/esphome/manager.py#L774
@@ -145,7 +147,7 @@ std::string build_svc_name(const char *svc_name) {
 void BleAdvProxy::send_discovery_event() {
   ESP_LOGD(TAG, "Sending discovery event");
   static const std::map<std::string, std::string> KV = {{CONF_ADV_EVT, ADV_RECV_EVENT},
-                                                        {CONF_MAC, get_mac()},
+                                                        {CONF_MAC, get_str_mac(esp_bt_dev_get_address())},
                                                         {CONF_NAME, App.get_name()},
                                                         {CONF_PUB_SVC, build_svc_name(ADV_SVC_V0)},  // Legacy
                                                         {SETUP_SVC_V0, build_svc_name(SETUP_SVC_V0)},
@@ -220,7 +222,7 @@ void BleAdvProxy::loop() {
 void BleAdvProxy::gap_scan_event_handler(const esp32_ble::BLEScanResult &sr) {
   if (sr.adv_data_len <= MAX_PACKET_LEN && sr.adv_data_len > 0) {
     if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
-      this->recv_packets_.emplace_back(sr.ble_adv, sr.adv_data_len, millis() + this->dupe_ignore_duration_);
+      this->recv_packets_.emplace_back(sr.ble_adv, sr.adv_data_len, sr.bda, millis() + this->dupe_ignore_duration_);
       xSemaphoreGive(this->scan_result_lock_);
     } else {
       ESP_LOGW(TAG, "evt - failed to take lock");
