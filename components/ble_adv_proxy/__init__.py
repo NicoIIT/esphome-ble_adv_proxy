@@ -1,3 +1,4 @@
+import logging
 import esphome.codegen as cg
 from esphome.components.esp32_ble import CONF_BLE_ID, ESP32BLE
 import esphome.config_validation as cv
@@ -11,6 +12,17 @@ bleadvproxy_ns = cg.esphome_ns.namespace("ble_adv_proxy")
 BleAdvProxy = bleadvproxy_ns.class_("BleAdvProxy", cg.Component)
 
 CONF_BLE_ADV_USE_MAX_TX_POWER = "use_max_tx_power"
+
+# A wonderful HACK to avoid the need for users to define the 'api' option 'custom_services' to True:
+# we patch the CONFIG_SCHEMA of the 'api' component to setup the default value of 'custom_services' to True
+# This can break anytime, but anyway ESPHome changes regularly break all our users, so not less risky...
+try:
+    from esphome.components.api import CONFIG_SCHEMA as API_CONFIG_SCHEMA, CONF_CUSTOM_SERVICES as API_CONF_CUSTOM_SERVICES
+    vals = list(API_CONFIG_SCHEMA.validators)
+    vals[0] = vals[0].extend({cv.Optional(API_CONF_CUSTOM_SERVICES, default=True): cv.boolean})
+    API_CONFIG_SCHEMA.validators = tuple(vals)
+except:
+    logging.warning("Unable to define api custom_services to True, please refer to the doc to do it manually.")
 
 CONFIG_SCHEMA = cv.All(
     cv.Schema(

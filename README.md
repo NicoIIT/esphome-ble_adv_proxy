@@ -16,6 +16,12 @@ external_components:
   source: github://NicoIIT/esphome-ble_adv_proxy
 ```
 
+3. Since ESPHome 2025.7.0, you need to define the `custom_services: true` at api level in the yaml config as this component needs it:
+```yaml
+api:
+  custom_services: true
+```
+
 It can also be used with an existing config including ble_adv_manager / ble_adv_remote / ble_adv_controller, this will ease migrations from those components to the HA integration.
 
 ## Variables
