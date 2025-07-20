@@ -56,7 +56,7 @@ class BleAdvProxy : public Component,
   esp_ble_adv_params_t adv_params_ = {
       .adv_int_min = 0x20,
       .adv_int_max = 0x20,
-      .adv_type = ADV_TYPE_NONCONN_IND,
+      .adv_type = ADV_TYPE_IND,
       .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
       .peer_addr = {0x00},
       .peer_addr_type = BLE_ADDR_TYPE_PUBLIC,
