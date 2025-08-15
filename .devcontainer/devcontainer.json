@@ -38,7 +38,7 @@
                 "files.trimTrailingWhitespace": true,
                 "python.analysis.typeCheckingMode": "basic",
                 "python.analysis.autoImportCompletions": true,
-                "python.defaultInterpreterPath": "/usr/bin/python3",
+                "python.defaultInterpreterPath": "/usr/local/bin/python3",
                 "python.analysis.diagnosticSeverityOverrides": {
                     "reportArgumentType": "none"
                 },

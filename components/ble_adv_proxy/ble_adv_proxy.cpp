@@ -24,12 +24,15 @@ static constexpr const char *DISCOVERY_EVENT = "esphome.ble_adv.discovery";
 static constexpr const char *ADV_RECV_EVENT = "esphome.ble_adv.raw_adv";
 static constexpr const char *SETUP_SVC_V0 = "setup_svc_v0";
 static constexpr const char *CONF_IGN_ADVS = "ignored_advs";
+static constexpr const char *CONF_IGN_CIDS = "ignored_cids";
+static constexpr const char *CONF_IGN_MACS = "ignored_macs";
 static constexpr const char *CONF_IGN_DURATION = "ignored_duration";
 static constexpr const char *ADV_SVC_V0 = "adv_svc";  // legacy name / service
 static constexpr const char *ADV_SVC_V1 = "adv_svc_v1";
 static constexpr const char *CONF_RAW = "raw";
 static constexpr const char *CONF_ORIGIN = "orig";
 static constexpr const char *CONF_DURATION = "duration";
+static constexpr const char *CONF_REPEAT = "repeat";
 static constexpr const char *CONF_NAME = "name";
 static constexpr const char *CONF_MAC = "mac";
 static constexpr const char *CONF_ADV_EVT = "adv_recv_event";
@@ -38,6 +41,8 @@ static constexpr const char *CONF_PUB_SVC = "publish_adv_svc";  // legacy name /
 static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL = 60 * 1000;
 static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL_SHORT = 3 * 1000;
 static constexpr const uint8_t DISCOVERY_EMIT_NB_SHORT = 10;
+static constexpr const uint8_t REPEAT_NB = 3;
+static constexpr const uint8_t MIN_ADV = 0x20;
 
 BleAdvParam::BleAdvParam(const std::string &hex_string, uint32_t duration)
     : duration_(duration), len_(std::min(MAX_PACKET_LEN, hex_string.size() / 2)) {
@@ -51,38 +56,50 @@ BleAdvParam::BleAdvParam(const uint8_t *buf, size_t len, const esp_bd_addr_t &or
 }
 
 void BleAdvProxy::setup() {
-  this->register_service(&BleAdvProxy::on_setup_v0, SETUP_SVC_V0, {CONF_IGN_DURATION, CONF_IGN_ADVS});
+  this->register_service(&BleAdvProxy::on_setup_v0, SETUP_SVC_V0, {CONF_IGN_DURATION, CONF_IGN_CIDS, CONF_IGN_MACS});
   this->register_service(&BleAdvProxy::on_advertise_v0, ADV_SVC_V0, {CONF_RAW, CONF_DURATION});
   this->register_service(&BleAdvProxy::on_advertise_v1, ADV_SVC_V1,
-                         {CONF_RAW, CONF_DURATION, CONF_IGN_ADVS, CONF_IGN_DURATION});
+                         {CONF_RAW, CONF_DURATION, CONF_REPEAT, CONF_IGN_ADVS, CONF_IGN_DURATION});
   this->scan_result_lock_ = xSemaphoreCreateMutex();
+  App.register_text_sensor(&this->sensor_name_);
+  this->sensor_name_.set_object_id("ble_adv_proxy_name");
+  this->sensor_name_.set_name("ble_adv_proxy_name");
+  this->sensor_name_.set_entity_category(EntityCategory::ENTITY_CATEGORY_DIAGNOSTIC);
+  this->sensor_name_.publish_state(App.get_name());
 }
 
-void BleAdvProxy::on_setup_v0(float ign_duration, std::vector<std::string> ignored_advs) {
+void BleAdvProxy::on_setup_v0(float ign_duration, std::vector<float> ignored_cids,
+                              std::vector<std::string> ignored_macs) {
   this->dupe_ignore_duration_ = ign_duration;
   this->dupe_packets_.clear();
-  for (auto &ignored_adv : ignored_advs) {
-    this->check_add_dupe_packet(BleAdvParam(ignored_adv, 0));
+  this->ign_cids_.clear();
+  for (auto &ign_cid : ignored_cids) {
+    this->ign_cids_.emplace_back(uint16_t(ign_cid));
   }
-  ESP_LOGI(TAG, "SETUP - Duplicate ADVs ignored during %ds. %d ADVs Permanently ignored.",
-           this->dupe_ignore_duration_ / 1000, this->dupe_packets_.size());
+  ESP_LOGI(TAG, "SETUP - %d Company IDs Permanently ignored.", this->ign_cids_.size());
+  this->ign_macs_.clear();
+  std::swap(ignored_macs, this->ign_macs_);
+  ESP_LOGI(TAG, "SETUP - %d MACs Permanently ignored.", this->ign_macs_.size());
+  this->use_discovery_events_ = false;
 }
 
 void BleAdvProxy::on_advertise_v0(std::string raw, float duration) {
-  ESP_LOGD(TAG, "send adv - %s", raw.c_str());
-  this->send_packets_.emplace_back(raw, duration);
-  // Prevent this packet from being re sent to HA host in case re received
-  this->check_add_dupe_packet(BleAdvParam(raw, millis() + this->dupe_ignore_duration_));
+  this->on_advertise_v1(raw, duration / REPEAT_NB, REPEAT_NB, {raw}, this->dupe_ignore_duration_);
 }
 
-void BleAdvProxy::on_advertise_v1(std::string raw, float duration, std::vector<std::string> ignored_advs,
+void BleAdvProxy::on_advertise_v1(std::string raw, float duration, float repeat, std::vector<std::string> ignored_advs,
                                   float ign_duration) {
-  ESP_LOGD(TAG, "send adv - %s", raw.c_str());
-  this->send_packets_.emplace_back(raw, duration);
+  uint8_t int_repeat = uint8_t(repeat);
+  uint32_t int_duration = uint32_t(duration);
+  uint32_t int_ign_duration = uint32_t(ign_duration);
+  ESP_LOGD(TAG, "send adv - %s, duration %dms, repeat: %d", raw.c_str(), int_duration, int_repeat);
+  for (uint8_t i = 0; i < int_repeat; ++i) {
+    this->send_packets_.emplace_back(raw, int_duration);
+  }
   // Prevent ignored packets from being re sent to HA host in case received
   for (auto &ignored_adv : ignored_advs) {
-    ESP_LOGD(TAG, "Ignoring ADV for %ds: %s", ign_duration / 1000, ignored_adv.c_str());
-    this->check_add_dupe_packet(BleAdvParam(ignored_adv, ign_duration));
+    // ESP_LOGD(TAG, "Ignoring ADV for %ds: %s", int_ign_duration / 1000, ignored_adv.c_str());
+    this->check_add_dupe_packet(BleAdvParam(ignored_adv, millis() + int_ign_duration));
   }
 }
 
@@ -105,15 +122,14 @@ std::string get_str_mac(const uint8_t *mac) {
   return str_snprintf("%02X:%02X:%02X:%02X:%02X:%02X", 17, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-void BleAdvProxy::on_raw_recv(const BleAdvParam &param) {
+void BleAdvProxy::on_raw_recv(const BleAdvParam &param, const std::string &str_mac) {
   std::string raw = esphome::format_hex(param.buf_, param.len_);
-  std::string orig = get_str_mac(param.orig_);
-  ESP_LOGD(TAG, "[%s] recv raw - %s", orig.c_str(), raw.c_str());
+  ESP_LOGD(TAG, "[%s] recv raw - %s", str_mac.c_str(), raw.c_str());
   if (!this->is_connected()) {
     ESP_LOGD(TAG, "No clients connected to API server, received adv ignored.");
     return;
   }
-  this->fire_homeassistant_event(ADV_RECV_EVENT, {{CONF_RAW, std::move(raw)}, {CONF_ORIGIN, std::move(orig)}});
+  this->fire_homeassistant_event(ADV_RECV_EVENT, {{CONF_RAW, std::move(raw)}, {CONF_ORIGIN, std::move(str_mac)}});
 }
 
 void BleAdvProxy::setup_max_tx_power() {
@@ -161,21 +177,23 @@ void BleAdvProxy::loop() {
     return;
   }
 
-  // Handle discovery
-  if (!this->api_was_connected_ && this->is_connected()) {
-    // Reconnection occured: setup discovery in a few seconds
-    this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL_SHORT;
-    this->nb_short_sent_ = DISCOVERY_EMIT_NB_SHORT;
-  }
-  this->api_was_connected_ = this->is_connected();
-  if (this->api_was_connected_ && this->next_discovery_ < millis()) {
-    if (this->nb_short_sent_ > 0) {
-      this->nb_short_sent_ -= 1;
+  // Handle discovery - LEGACY, kept for backward compatibility
+  if (this->use_discovery_events_) {
+    if (!this->api_was_connected_ && this->is_connected()) {
+      // Reconnection occured: setup discovery in a few seconds
       this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL_SHORT;
-    } else {
-      this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL;
+      this->nb_short_sent_ = DISCOVERY_EMIT_NB_SHORT;
     }
-    this->send_discovery_event();
+    this->api_was_connected_ = this->is_connected();
+    if (this->api_was_connected_ && this->next_discovery_ < millis()) {
+      if (this->nb_short_sent_ > 0) {
+        this->nb_short_sent_ -= 1;
+        this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL_SHORT;
+      } else {
+        this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL;
+      }
+      this->send_discovery_event();
+    }
   }
 
   // Cleanup expired packets
@@ -190,10 +208,18 @@ void BleAdvProxy::loop() {
     ESP_LOGW(TAG, "loop - failed to take lock");
   }
 
-  // handle new packets
-  for (auto &packet : new_packets) {
-    if (this->check_add_dupe_packet(std::move(packet))) {
-      this->on_raw_recv(this->dupe_packets_.back());
+  // handle new packets, exclude if one of the following is true:
+  // - len is too small
+  // - company ID is part of ignored company ids
+  // - mac is part of ignored macs
+  // - is dupe of previously received
+  for (auto &p : new_packets) {
+    uint16_t cid = (p.buf_[3] << 8) + p.buf_[2];
+    std::string str_mac = get_str_mac(p.orig_);
+    if (p.len_ > 3 && std::find(this->ign_cids_.begin(), this->ign_cids_.end(), cid) == this->ign_cids_.end() &&
+        std::find(this->ign_macs_.begin(), this->ign_macs_.end(), str_mac) == this->ign_macs_.end() &&
+        this->check_add_dupe_packet(std::move(p))) {
+      this->on_raw_recv(this->dupe_packets_.back(), str_mac);
     }
   }
 
@@ -204,6 +230,9 @@ void BleAdvProxy::loop() {
       BleAdvParam &packet = this->send_packets_.front();
       this->setup_max_tx_power();
       ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ble_gap_config_adv_data_raw(packet.buf_, packet.len_));
+      uint8_t adv_time = std::max(MIN_ADV, uint8_t(1.6 * packet.duration_));
+      this->adv_params_.adv_int_min = adv_time;
+      this->adv_params_.adv_int_max = adv_time;
       ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ble_gap_start_advertising(&(this->adv_params_)));
       this->adv_stop_time_ = millis() + packet.duration_;
     }

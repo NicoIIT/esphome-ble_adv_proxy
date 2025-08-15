@@ -3,10 +3,12 @@
 #include "esphome/core/component.h"
 #include "esphome/components/esp32_ble/ble.h"
 #include "esphome/components/api/custom_api_device.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 
 #include <freertos/semphr.h>
 #include <esp_gap_ble_api.h>
 #include <list>
+#include <vector>
 
 namespace esphome {
 
@@ -40,10 +42,11 @@ class BleAdvProxy : public Component,
   void loop() override;
 
   void set_use_max_tx_power(bool use_max_tx_power) { this->use_max_tx_power_ = use_max_tx_power; }
-  void on_setup_v0(float ign_duration, std::vector<std::string> ignored_advs);
+  void on_setup_v0(float ign_duration, std::vector<float> ignored_cids, std::vector<std::string> ignored_macs);
   void on_advertise_v0(std::string raw, float duration);
-  void on_advertise_v1(std::string raw, float duration, std::vector<std::string> ignored_advs, float ign_duration);
-  void on_raw_recv(const BleAdvParam &param);
+  void on_advertise_v1(std::string raw, float duration, float repeat, std::vector<std::string> ignored_advs,
+                       float ign_duration);
+  void on_raw_recv(const BleAdvParam &param, const std::string &str_mac);
   bool check_add_dupe_packet(BleAdvParam &&packet);
 
  protected:
@@ -56,7 +59,7 @@ class BleAdvProxy : public Component,
   esp_ble_adv_params_t adv_params_ = {
       .adv_int_min = 0x20,
       .adv_int_max = 0x20,
-      .adv_type = ADV_TYPE_NONCONN_IND,
+      .adv_type = ADV_TYPE_IND,
       .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
       .peer_addr = {0x00},
       .peer_addr_type = BLE_ADDR_TYPE_PUBLIC,
@@ -77,10 +80,14 @@ class BleAdvProxy : public Component,
   SemaphoreHandle_t scan_result_lock_;
   std::list<BleAdvParam> recv_packets_;
   std::list<BleAdvParam> dupe_packets_;
+  std::vector<std::string> ign_macs_;
+  std::vector<uint16_t> ign_cids_;
 
   /*
   API Discovery
   */
+  text_sensor::TextSensor sensor_name_;
+  bool use_discovery_events_ = true;
   void send_discovery_event();
   bool api_was_connected_ = false;
   uint32_t next_discovery_ = 0;
