@@ -42,6 +42,7 @@ class BleAdvProxy : public Component,
   void loop() override;
 
   void set_use_max_tx_power(bool use_max_tx_power) { this->use_max_tx_power_ = use_max_tx_power; }
+  void set_sensor_name(text_sensor::TextSensor *sens) { this->sensor_name_ = sens; }
   void on_setup_v0(float ign_duration, std::vector<float> ignored_cids, std::vector<std::string> ignored_macs);
   void on_advertise_v0(std::string raw, float duration);
   void on_advertise_v1(std::string raw, float duration, float repeat, std::vector<std::string> ignored_advs,
@@ -86,7 +87,7 @@ class BleAdvProxy : public Component,
   /*
   API Discovery
   */
-  text_sensor::TextSensor sensor_name_;
+  text_sensor::TextSensor *sensor_name_;
   bool use_discovery_events_ = true;
   void send_discovery_event();
   bool api_was_connected_ = false;

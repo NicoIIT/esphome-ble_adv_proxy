@@ -2,6 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
 #include <esp_err.h>
+#include <esp_bt.h>
 #include <esp_bt_device.h>
 
 #ifdef ESP_PWR_LVL_P20
@@ -61,11 +62,7 @@ void BleAdvProxy::setup() {
   this->register_service(&BleAdvProxy::on_advertise_v1, ADV_SVC_V1,
                          {CONF_RAW, CONF_DURATION, CONF_REPEAT, CONF_IGN_ADVS, CONF_IGN_DURATION});
   this->scan_result_lock_ = xSemaphoreCreateMutex();
-  App.register_text_sensor(&this->sensor_name_);
-  this->sensor_name_.set_object_id("ble_adv_proxy_name");
-  this->sensor_name_.set_name("ble_adv_proxy_name");
-  this->sensor_name_.set_entity_category(EntityCategory::ENTITY_CATEGORY_DIAGNOSTIC);
-  this->sensor_name_.publish_state(App.get_name());
+  this->sensor_name_->publish_state(App.get_name());
 }
 
 void BleAdvProxy::on_setup_v0(float ign_duration, std::vector<float> ignored_cids,

@@ -20,6 +20,7 @@ external_components:
 ```yaml
 api:
   custom_services: true
+  homeassistant_services: true
 ```
 
 It can also be used with an existing config including ble_adv_manager / ble_adv_remote / ble_adv_controller, this will ease migrations from those components to the HA integration.
