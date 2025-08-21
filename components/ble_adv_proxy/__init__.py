@@ -46,6 +46,7 @@ BleAdvProxy = bleadvproxy_ns.class_("BleAdvProxy", cg.Component)
 CONF_BLE_ADV_USE_MAX_TX_POWER = "use_max_tx_power"
 CONF_NAME_SENSOR = "name_sensor"
 CONF_VAL_NAME_SENSOR = "ble_adv_proxy_name"
+CONF_ADAPTER_NAME = "adapter_name"
 
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
@@ -53,6 +54,7 @@ CONFIG_SCHEMA = cv.All(
             cv.GenerateID(): cv.declare_id(BleAdvProxy),
             cv.GenerateID(CONF_BLE_ID): cv.use_id(ESP32BLE),
             cv.Optional(CONF_BLE_ADV_USE_MAX_TX_POWER, default=False): cv.boolean,
+            cv.Optional(CONF_ADAPTER_NAME): cv.valid_name,
             cv.Optional(
                 CONF_NAME_SENSOR,
                 default={
@@ -78,4 +80,4 @@ async def to_code(config):
     cg.add(parent.register_gap_scan_event_handler(var))
     cg.add(var.set_parent(parent))
     sens = await new_text_sensor(config[CONF_NAME_SENSOR])
-    cg.add(var.set_sensor_name(sens))
+    cg.add(var.set_sensor_name(sens, config.get(CONF_ADAPTER_NAME, "")))

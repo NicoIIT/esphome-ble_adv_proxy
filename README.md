@@ -12,11 +12,18 @@ The easiest solution to build an ESPHome based binary including this component i
 ble_adv_proxy:
   use_max_tx_power: true # see below, remove in case of build issues
 
+  # The 'adapter_name' option should be added ONLY if you want the adapter to have a different name from the device (esphome.name)
+  # If you change the adapter_name, your ble_adv integrations using it will stop working and will require you to update them
+  #   by reconfiguring -> Technical Parameters (see ha-ble-adv doc)
+  # The name MUST be unique for HA: if you have several proxies linked to a HA instance, they MUST all have different names
+  # This option requires ha-ble-adv v1.2.1 minimum
+  adapter_name: esp-proxy
+
 external_components:
   source: github://NicoIIT/esphome-ble_adv_proxy
 ```
 
-3. Since ESPHome 2025.7.0, you need to define the `custom_services: true` at api level in the yaml config as this component needs it:
+3. Since ESPHome 2025.7.0, you need to define the `custom_services: true` and `homeassistant_services: true` at api level in the yaml config as this component needs it:
 ```yaml
 api:
   custom_services: true

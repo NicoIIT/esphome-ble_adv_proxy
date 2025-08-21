@@ -62,7 +62,15 @@ void BleAdvProxy::setup() {
   this->register_service(&BleAdvProxy::on_advertise_v1, ADV_SVC_V1,
                          {CONF_RAW, CONF_DURATION, CONF_REPEAT, CONF_IGN_ADVS, CONF_IGN_DURATION});
   this->scan_result_lock_ = xSemaphoreCreateMutex();
-  this->sensor_name_->publish_state(App.get_name());
+  if (this->sensor_name_->state.empty()) {
+    this->sensor_name_->state = App.get_name();
+  }
+  this->sensor_name_->publish_state(this->sensor_name_->state);
+}
+
+void BleAdvProxy::dump_config() {
+  ESP_LOGCONFIG(TAG, "BleAdvProxy '%s'", this->sensor_name_->state.c_str());
+  ESP_LOGCONFIG(TAG, "  Use Max TxPower: %s", this->use_max_tx_power_ ? "True" : "False");
 }
 
 void BleAdvProxy::on_setup_v0(float ign_duration, std::vector<float> ignored_cids,
