@@ -9,4 +9,11 @@ esp32:
 esphome:
   name: esp32-idf
 
+network: # needed by api, itself needed by ble_adv_proxy
+
 ble_adv_proxy:
+
+external_components:
+  - source:
+      type: local
+      path: ../components

@@ -3,9 +3,7 @@
 """Override ESPHome CLI tool located in /usr/local/bin/esphome.
 
 Feature 1: Overload the 'external_components' to specify the only source as local 'components' workspace folder
-Fetaure 2: Share the compiled software in between configurations by creating shared pio projects
-           This is done by overriding the build_path by a hash of the build_flags
-Feature 3: use the platformio idedata computed while compiling to feed the '.vscode/c_cpp_properties.json' to use C++ intellisense
+Feature 2: use the platformio idedata computed while compiling to feed the '.vscode/c_cpp_properties.json' to use C++ intellisense
 """
 
 import json
@@ -13,14 +11,10 @@ import os
 import sys
 from typing import Any
 
-from esphome import platformio_api, yaml_util  # , writer
-
-# import hashlib
-# import shutil
+from esphome import platformio_api, yaml_util
 import esphome.__main__ as main_esphome
 from esphome.core import CORE, TimePeriod
-
-# from esphome.helpers import copy_file_if_changed
+from esphome.git import run_git_command
 
 
 def get_wsk_folder(folder_name: str):
@@ -34,52 +28,24 @@ def get_wsk_folder(folder_name: str):
 def load_yaml_override(fname: str, clear_secrets: bool = True) -> Any:
     conf = prev_load_override(fname, clear_secrets)
     comp_folder = get_wsk_folder("components")
-    conf["external_components"] = [
-        {
-            "source": {"path": comp_folder, "type": "local"},
-            "refresh": TimePeriod(seconds=1),
-            "components": "all",
-        }
-    ]
-    main_esphome._LOGGER.info(
-        f"Override Feature 1: 'external_components' setup to local '{comp_folder}'"
-    )
+    wsk = get_wsk_folder(".")
+    gs = run_git_command(["git", "config", "--get", "remote.origin.url"], wsk)[:-4]
+    main_esphome._LOGGER.info(gs)
+    for comp in conf["external_components"]:
+        src = comp["source"]
+        if (isinstance(src, str) and src == f"github://{gs[19:]}") or (
+            isinstance(src, dict) and src["type"] == "git" and src["url"] == gs
+        ):
+            comp["source"] = {"path": comp_folder, "type": "local"}
+            comp["refresh"] = TimePeriod(seconds=1)
+            main_esphome._LOGGER.info(
+                f"Override Feature 1: external component '{gs}' patched to local '{comp_folder}'"
+            )
     return conf
 
 
 prev_load_override = yaml_util.load_yaml
 yaml_util.load_yaml = load_yaml_override
-
-
-#############################################
-## Override cpp write (build path)
-#############################################
-# Feature 2 deactivated: various impact on builds and not improving global footprint
-#  def write_cpp_override(conf):
-#     main_esphome.generate_cpp_contents(conf)
-#     main_esphome._LOGGER.info("Override Feature 2: Cache builds with same parameters.")
-#     # maybe add framework params? not sure as already in build_args
-#     params = [*CORE.build_flags]
-#     base_conf = hashlib.sha256("".join(sorted(params)).encode("utf-8")).hexdigest()
-#     build_folder = get_wsk_folder(f".cache/builds/{base_conf}")
-#     # move files potentially built in previous build path
-#     src_src = os.path.join(str(CORE.build_path), "src")
-#     dst_src = os.path.join(build_folder, "src")
-#     if os.path.exists(src_src):
-#         print("src exists")
-#         for f in sorted(os.listdir(src_src)):
-#             file = os.path.join(src_src, f)
-#             if os.path.isfile(file):
-#                 copy_file_if_changed(file, os.path.join(dst_src, f))
-#     CORE.build_path = build_folder
-#     CORE.name = "PlatformIO"
-#     return main_esphome.write_cpp_file()
-#
-# def update_storage_json_override() -> None:
-#     pass
-#
-# main_esphome.write_cpp = write_cpp_override
-# writer.update_storage_json = update_storage_json_override
 
 
 #############################################
@@ -99,7 +65,7 @@ def compile_program_override(args, conf):
         ) as output_json:
             json.dump(convert_pio_to_vscode(idedata.raw), output_json, indent=4)
         main_esphome._LOGGER.info(
-            f"Override Feature 3: vscode C++ Configuration '{idedata.raw['env_name']}' refreshed."
+            f"Override Feature 2: vscode C++ Configuration '{idedata.raw['env_name']}' refreshed."
         )
         return 0
     return 1
