@@ -17,7 +17,7 @@ jobs:
     outputs:
       esphome_version: ${{ steps.version.outputs.esphome_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: version
@@ -30,7 +30,7 @@ jobs:
     container:
       image: docker://esphome/esphome:${{needs.get_image_version.outputs.esphome_version}}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Test with base config
