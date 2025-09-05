@@ -44,6 +44,7 @@ static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL_SHORT = 3 * 1000;
 static constexpr const uint8_t DISCOVERY_EMIT_NB_SHORT = 10;
 static constexpr const uint8_t REPEAT_NB = 3;
 static constexpr const uint8_t MIN_ADV = 0x20;
+static constexpr const uint8_t MIN_VIABLE_PACKET_LEN = 5;
 
 BleAdvParam::BleAdvParam(const std::string &hex_string, uint32_t duration)
     : duration_(duration), len_(std::min(MAX_PACKET_LEN, hex_string.size() / 2)) {
@@ -205,7 +206,7 @@ void BleAdvProxy::loop() {
   this->dupe_packets_.remove_if([&](BleAdvParam &p) { return p.duration_ > 0 && p.duration_ < millis(); });
 
   // swap packet list to further process it outside of the lock
-  std::list<BleAdvParam> new_packets;
+  std::list<esp32_ble::BLEScanResult> new_packets;
   if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
     std::swap(this->recv_packets_, new_packets);
     xSemaphoreGive(this->scan_result_lock_);
@@ -218,12 +219,13 @@ void BleAdvProxy::loop() {
   // - company ID is part of ignored company ids
   // - mac is part of ignored macs
   // - is dupe of previously received
-  for (auto &p : new_packets) {
-    uint16_t cid = (p.buf_[3] << 8) + p.buf_[2];
-    std::string str_mac = get_str_mac(p.orig_);
-    if (p.len_ > 3 && std::find(this->ign_cids_.begin(), this->ign_cids_.end(), cid) == this->ign_cids_.end() &&
+  for (auto &sr : new_packets) {
+    uint16_t cid = (sr.ble_adv[3] << 8) + sr.ble_adv[2];
+    std::string str_mac = get_str_mac(sr.bda);
+    if (std::find(this->ign_cids_.begin(), this->ign_cids_.end(), cid) == this->ign_cids_.end() &&
         std::find(this->ign_macs_.begin(), this->ign_macs_.end(), str_mac) == this->ign_macs_.end() &&
-        this->check_add_dupe_packet(std::move(p))) {
+        this->check_add_dupe_packet(
+            BleAdvParam(sr.ble_adv, sr.adv_data_len, sr.bda, millis() + this->dupe_ignore_duration_))) {
       this->on_raw_recv(this->dupe_packets_.back(), str_mac);
     }
   }
@@ -254,9 +256,9 @@ void BleAdvProxy::loop() {
 // We let the configuration of the scanning to esp32_ble_tracker, towards with stop / start
 // We only gather directly the raw events
 void BleAdvProxy::gap_scan_event_handler(const esp32_ble::BLEScanResult &sr) {
-  if (sr.adv_data_len <= MAX_PACKET_LEN && sr.adv_data_len > 0) {
+  if (sr.adv_data_len <= MAX_PACKET_LEN && sr.adv_data_len >= MIN_VIABLE_PACKET_LEN) {
     if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
-      this->recv_packets_.emplace_back(sr.ble_adv, sr.adv_data_len, sr.bda, millis() + this->dupe_ignore_duration_);
+      this->recv_packets_.emplace_back(sr);
       xSemaphoreGive(this->scan_result_lock_);
     } else {
       ESP_LOGW(TAG, "evt - failed to take lock");

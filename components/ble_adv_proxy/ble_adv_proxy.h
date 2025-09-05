@@ -83,7 +83,7 @@ class BleAdvProxy : public Component,
    */
   void gap_scan_event_handler(const esp32_ble::BLEScanResult &scan_result) override;
   SemaphoreHandle_t scan_result_lock_;
-  std::list<BleAdvParam> recv_packets_;
+  std::list<esp32_ble::BLEScanResult> recv_packets_;
   std::list<BleAdvParam> dupe_packets_;
   std::vector<std::string> ign_macs_;
   std::vector<uint16_t> ign_cids_;
