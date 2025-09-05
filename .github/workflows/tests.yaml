@@ -1,0 +1,38 @@
+name: Compile tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  "0 0 * * *"
+  push:
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
+
+jobs:
+  get_image_version:
+    runs-on: ubuntu-latest
+    outputs:
+      esphome_version: ${{ steps.version.outputs.esphome_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        name: Set the Esphome image version
+        run: echo "esphome_version=$(grep FROM .devcontainer/Dockerfile | cut -d ':' -f 2)" >> $GITHUB_OUTPUT
+
+  tests:
+    needs: get_image_version
+    runs-on: ubuntu-latest
+    container:
+      image: docker://esphome/esphome:${{needs.get_image_version.outputs.esphome_version}}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Test with base config
+        run: |
+          esphome compile config/base.yaml
