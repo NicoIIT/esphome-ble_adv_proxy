@@ -21,7 +21,6 @@ namespace esphome {
 namespace ble_adv_proxy {
 
 static constexpr const char *TAG = "ble_adv_proxy";
-static constexpr const char *DISCOVERY_EVENT = "esphome.ble_adv.discovery";
 static constexpr const char *ADV_RECV_EVENT = "esphome.ble_adv.raw_adv";
 static constexpr const char *SETUP_SVC_V0 = "setup_svc_v0";
 static constexpr const char *CONF_IGN_ADVS = "ignored_advs";
@@ -34,14 +33,7 @@ static constexpr const char *CONF_RAW = "raw";
 static constexpr const char *CONF_ORIGIN = "orig";
 static constexpr const char *CONF_DURATION = "duration";
 static constexpr const char *CONF_REPEAT = "repeat";
-static constexpr const char *CONF_NAME = "name";
-static constexpr const char *CONF_MAC = "mac";
-static constexpr const char *CONF_ADV_EVT = "adv_recv_event";
-static constexpr const char *CONF_PUB_SVC = "publish_adv_svc";  // legacy name / service
 
-static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL = 60 * 1000;
-static constexpr const uint32_t DISCOVERY_EMIT_INTERVAL_SHORT = 3 * 1000;
-static constexpr const uint8_t DISCOVERY_EMIT_NB_SHORT = 10;
 static constexpr const uint8_t REPEAT_NB = 3;
 static constexpr const uint8_t MIN_ADV = 0x20;
 static constexpr const uint8_t MIN_VIABLE_PACKET_LEN = 5;
@@ -86,7 +78,6 @@ void BleAdvProxy::on_setup_v0(float ign_duration, std::vector<float> ignored_cid
   this->ign_macs_.clear();
   std::swap(ignored_macs, this->ign_macs_);
   ESP_LOGI(TAG, "SETUP - %d MACs Permanently ignored.", this->ign_macs_.size());
-  this->use_discovery_events_ = false;
 }
 
 void BleAdvProxy::on_advertise_v0(std::string raw, float duration) {
@@ -158,48 +149,10 @@ void BleAdvProxy::setup_max_tx_power() {
   this->max_tx_power_setup_done_ = true;
 }
 
-std::string build_svc_name(const char *svc_name) {
-  // same as done in home assistant core 'esphome.manager.build_service_name':
-  // https://github.com/home-assistant/core/blob/dev/homeassistant/components/esphome/manager.py#L774
-  std::string app_name = App.get_name();
-  std::replace(app_name.begin(), app_name.end(), '-', '_');
-  return str_sprintf("%s_%s", app_name.c_str(), svc_name);
-}
-
-void BleAdvProxy::send_discovery_event() {
-  ESP_LOGD(TAG, "Sending discovery event");
-  static const std::map<std::string, std::string> KV = {{CONF_ADV_EVT, ADV_RECV_EVENT},
-                                                        {CONF_MAC, get_str_mac(esp_bt_dev_get_address())},
-                                                        {CONF_NAME, App.get_name()},
-                                                        {CONF_PUB_SVC, build_svc_name(ADV_SVC_V0)},  // Legacy
-                                                        {SETUP_SVC_V0, build_svc_name(SETUP_SVC_V0)},
-                                                        {ADV_SVC_V1, build_svc_name(ADV_SVC_V1)}};
-  this->fire_homeassistant_event(DISCOVERY_EVENT, KV);
-}
-
 void BleAdvProxy::loop() {
   if (!this->get_parent()->is_active()) {
     // esp32_ble::ESP32BLE not ready: do not process any action
     return;
-  }
-
-  // Handle discovery - LEGACY, kept for backward compatibility
-  if (this->use_discovery_events_) {
-    if (!this->api_was_connected_ && this->is_connected()) {
-      // Reconnection occured: setup discovery in a few seconds
-      this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL_SHORT;
-      this->nb_short_sent_ = DISCOVERY_EMIT_NB_SHORT;
-    }
-    this->api_was_connected_ = this->is_connected();
-    if (this->api_was_connected_ && this->next_discovery_ < millis()) {
-      if (this->nb_short_sent_ > 0) {
-        this->nb_short_sent_ -= 1;
-        this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL_SHORT;
-      } else {
-        this->next_discovery_ = millis() + DISCOVERY_EMIT_INTERVAL;
-      }
-      this->send_discovery_event();
-    }
   }
 
   // Cleanup expired packets

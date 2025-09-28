@@ -76,13 +76,12 @@ class BleAdvProxy : public Component,
   bool max_tx_power_setup_done_ = false;
   void setup_max_tx_power();
 
-  uint32_t dupe_ignore_duration_ = 20000;
-
   /**
     Listening to ADV
    */
   void gap_scan_event_handler(const esp32_ble::BLEScanResult &scan_result) override;
   SemaphoreHandle_t scan_result_lock_;
+  uint32_t dupe_ignore_duration_ = 20000;
   std::list<esp32_ble::BLEScanResult> recv_packets_;
   std::list<BleAdvParam> dupe_packets_;
   std::vector<std::string> ign_macs_;
@@ -92,11 +91,6 @@ class BleAdvProxy : public Component,
   API Discovery
   */
   text_sensor::TextSensor *sensor_name_ = nullptr;
-  bool use_discovery_events_ = true;
-  void send_discovery_event();
-  bool api_was_connected_ = false;
-  uint32_t next_discovery_ = 0;
-  uint8_t nb_short_sent_ = 0;
 };
 
 }  // namespace ble_adv_proxy
