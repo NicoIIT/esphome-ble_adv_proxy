@@ -4,6 +4,12 @@ This component transforms your ESP32 into a bluetooth adv proxy that can be used
 
 Contrarily to the existing bluetooth_proxy component, this component is handling Raw Advertising exchanges in both directions which is mandatory in order to control devices using BLE Advertising.
 
+## Compatibility
+The compatibility of `ha-ble-adv` and `ble_adv_proxy` is ensured if using latest version of both components. Moreover the components are backward compatible for one month: any version of `ha-ble-adv` is compatible with a build of `ble_adv_proxy` done up to one month before or after the release of the version.
+
+=> Before opening an issue occuring on a rebuild of an ESP32 including this component, please ensure you have the latest version of `ha-ble-adv` installed in your Home Assistant instance.
+
+## Install
 The easiest solution to build an ESPHome based binary including this component is to add this feature to an existing [standard Bluetooth ESPHome Proxy](https://esphome.io/components/bluetooth_proxy.html):
 1. Create your standard Bluetooth ESPHome proxy following the standard guide, and have it available in HA. **No help will be provided on this part, you can find tons of help and tutorials on the net**
 2. Add this to the yaml config:
@@ -12,12 +18,14 @@ The easiest solution to build an ESPHome based binary including this component i
 ble_adv_proxy:
   use_max_tx_power: true # see below, remove in case of build issues
 
-  # The 'adapter_name' option should be added ONLY if you want the adapter to have a different name from the device (esphome.name)
-  # If you change the adapter_name, your ble_adv integrations using it will stop working and will require you to update them
-  #   by reconfiguring -> Technical Parameters (see ha-ble-adv doc)
-  # The name MUST be unique for HA: if you have several proxies linked to a HA instance, they MUST all have different names
+  # The 'adapter_name' option should be added ONLY if you want the adapter to have
+  #   a different name from the device (esphome.name)
+  # If you change the adapter_name, your ble_adv integrations using it will stop working
+  #   and will require you to update the reconfiguring -> Technical Parameters (see ha-ble-adv doc)
+  # The name MUST be unique for HA: if you have several proxies linked to a HA instance,
+  #   they MUST all have different names
   # This option requires ha-ble-adv v1.2.1 minimum
-  adapter_name: esp-proxy
+  # adapter_name: esp-proxy
 
 external_components:
   source: github://NicoIIT/esphome-ble_adv_proxy
@@ -35,6 +43,7 @@ It can also be used with an existing config including ble_adv_manager / ble_adv_
 ## Variables
 The following variables are available:
 - **use_max_tx_power** (Optional, Default: False): Try to use the max TX Power for the Advertising stack, as defined in Espressif [doc](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/bluetooth/controller_vhci.html#_CPPv417esp_power_level_t). Setup to 'true' if your ESP32 is far from your device and have difficulties to communicate with it.
+- **adapter_name** (Optional, Default: the node name): The name of the adapter, defaulting to the name of the node if not provided.
 
 ## FAQ
 ### I have a lot of warnings from esp32_ble_tracker, but I did not even add this component! How can I get ride of them ?
