@@ -78,6 +78,7 @@ void BleAdvProxy::on_setup_v0(float ign_duration, std::vector<float> ignored_cid
   this->ign_macs_.clear();
   std::swap(ignored_macs, this->ign_macs_);
   ESP_LOGI(TAG, "SETUP - %d MACs Permanently ignored.", this->ign_macs_.size());
+  this->setup_done_ = true;
 }
 
 void BleAdvProxy::on_advertise_v0(std::string raw, float duration) {
@@ -86,6 +87,7 @@ void BleAdvProxy::on_advertise_v0(std::string raw, float duration) {
 
 void BleAdvProxy::on_advertise_v1(std::string raw, float duration, float repeat, std::vector<std::string> ignored_advs,
                                   float ign_duration) {
+  this->setup_done_ = true;  // Flag setup done as best effort
   uint8_t int_repeat = uint8_t(repeat);
   uint32_t int_duration = uint32_t(duration);
   uint32_t int_ign_duration = uint32_t(ign_duration);
@@ -150,8 +152,13 @@ void BleAdvProxy::setup_max_tx_power() {
 }
 
 void BleAdvProxy::loop() {
-  if (!this->get_parent()->is_active()) {
-    // esp32_ble::ESP32BLE not ready: do not process any action
+  if (!this->get_parent()->is_active() || !this->setup_done_) {
+    // esp32_ble::ESP32BLE not ready or Setup not done yet: do not process any action
+    return;
+  }
+
+  if (!this->is_connected()) {  // API not connected (disconnection occured), re wait for setup
+    this->setup_done_ = false;
     return;
   }
 
@@ -209,7 +216,7 @@ void BleAdvProxy::loop() {
 // We let the configuration of the scanning to esp32_ble_tracker, towards with stop / start
 // We only gather directly the raw events
 void BleAdvProxy::gap_scan_event_handler(const esp32_ble::BLEScanResult &sr) {
-  if (sr.adv_data_len <= MAX_PACKET_LEN && sr.adv_data_len >= MIN_VIABLE_PACKET_LEN) {
+  if (this->setup_done_ && sr.adv_data_len <= MAX_PACKET_LEN && sr.adv_data_len >= MIN_VIABLE_PACKET_LEN) {
     if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
       this->recv_packets_.emplace_back(sr);
       xSemaphoreGive(this->scan_result_lock_);

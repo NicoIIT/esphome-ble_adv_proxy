@@ -90,6 +90,7 @@ class BleAdvProxy : public Component,
   /*
   API Discovery
   */
+  bool setup_done_ = false;
   text_sensor::TextSensor *sensor_name_ = nullptr;
 };
 
