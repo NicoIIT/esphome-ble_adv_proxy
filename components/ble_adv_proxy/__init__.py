@@ -11,6 +11,16 @@ from esphome.const import (
     ENTITY_CATEGORY_DIAGNOSTIC,
 )
 
+# Support function esp32_ble.register_gap_scan_event_handler introduced in ESPHome 2025.11
+# as well as in previous version with fallback to previous implementation
+try:
+    from esphome.components.esp32_ble import register_gap_scan_event_handler
+except ImportError:
+
+    def register_gap_scan_event_handler(parent_var, handler_var) -> None:
+        cg.add(parent_var.register_gap_scan_event_handler(handler_var))
+
+
 # A wonderful HACK to avoid the need for users to define the 'api' option 'custom_services' to True:
 # we patch the CONFIG_SCHEMA of the 'api' component to setup the default value of 'custom_services' to True
 # This can break anytime, but anyway ESPHome changes regularly break all our users, so not less risky...
@@ -41,7 +51,9 @@ DEPENDENCIES = ["esp32", "api"]
 MULTI_CONF = False
 
 bleadvproxy_ns = cg.esphome_ns.namespace("ble_adv_proxy")
-BleAdvProxy = bleadvproxy_ns.class_("BleAdvProxy", cg.Component)
+BleAdvProxy = bleadvproxy_ns.class_(
+    "BleAdvProxy", cg.Component, cg.Parented.template(ESP32BLE)
+)
 
 CONF_BLE_ADV_USE_MAX_TX_POWER = "use_max_tx_power"
 CONF_NAME_SENSOR = "name_sensor"
@@ -73,11 +85,10 @@ CONFIG_SCHEMA = cv.All(
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
-    cg.add(var.set_setup_priority(300))  # start after Bluetooth
     await cg.register_component(var, config)
     cg.add(var.set_use_max_tx_power(config[CONF_BLE_ADV_USE_MAX_TX_POWER]))
     parent = await cg.get_variable(config[CONF_BLE_ID])
-    cg.add(parent.register_gap_scan_event_handler(var))
+    register_gap_scan_event_handler(parent, var)
     cg.add(var.set_parent(parent))
     sens = await new_text_sensor(config[CONF_NAME_SENSOR])
     cg.add(var.set_sensor_name(sens, config.get(CONF_ADAPTER_NAME, "")))

@@ -29,7 +29,7 @@ def load_yaml_override(fname: str, clear_secrets: bool = True) -> Any:
     conf = prev_load_override(fname, clear_secrets)
     comp_folder = get_wsk_folder("components")
     wsk = get_wsk_folder(".")
-    gs = run_git_command(["git", "config", "--get", "remote.origin.url"], wsk)[:-4]
+    gs = run_git_command(["git", "config", "--get", "remote.origin.url"], wsk)
     main_esphome._LOGGER.info(gs)
     for comp in conf["external_components"]:
         src = comp["source"]
@@ -74,11 +74,6 @@ def compile_program_override(args, conf):
 main_esphome.compile_program = compile_program_override
 
 
-def get_std_flag(flags: list[str]):
-    std_flag = [flag[5:] for flag in flags if flag.startswith("-std=")]
-    return std_flag[0] if std_flag else ""
-
-
 def convert_pio_to_vscode(input_data):
     all_include = [
         *input_data["includes"]["build"],
@@ -95,10 +90,8 @@ def convert_pio_to_vscode(input_data):
                     "path": all_include,
                 },
                 "defines": input_data["defines"],
-                # "cStandard": get_std_flag(input_data["cc_flags"]),
-                # "cppStandard": get_std_flag(input_data["cxx_flags"]),
-                "compilerPath": input_data["cc_path"],
-                "compilerArgs": input_data["cc_flags"],
+                "compilerPath": input_data["cxx_path"],
+                "compilerArgs": input_data["cxx_flags"],
             }
         ],
         "version": 4,
