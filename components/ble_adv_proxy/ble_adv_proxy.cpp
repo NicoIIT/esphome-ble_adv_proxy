@@ -124,8 +124,8 @@ std::string get_str_mac(const uint8_t *mac) {
 void BleAdvProxy::on_raw_recv(const BleAdvParam &param, const std::string &str_mac) {
   std::string raw = esphome::format_hex(param.buf_, param.len_);
   ESP_LOGD(TAG, "[%s] recv raw - %s", str_mac.c_str(), raw.c_str());
-  if (!this->is_connected()) {
-    ESP_LOGD(TAG, "No clients connected to API server, received adv ignored.");
+  if (!this->is_connected() || !this->setup_done_) {
+    ESP_LOGD(TAG, "Connection to HA not ready, received adv ignored.");
     return;
   }
   this->fire_homeassistant_event(ADV_RECV_EVENT, {{CONF_RAW, std::move(raw)}, {CONF_ORIGIN, std::move(str_mac)}});
@@ -152,14 +152,14 @@ void BleAdvProxy::setup_max_tx_power() {
 }
 
 void BleAdvProxy::loop() {
-  if (!this->get_parent()->is_active() || !this->setup_done_) {
-    // esp32_ble::ESP32BLE not ready or Setup not done yet: do not process any action
+  if (!this->get_parent()->is_active()) {
+    // esp32_ble::ESP32BLE not ready: do not process any action
     return;
   }
 
-  if (!this->is_connected()) {  // API not connected (disconnection occured), re wait for setup
+  if (!this->is_connected() && this->setup_done_) {
+    ESP_LOGI(TAG, "HA Connection lost.");
     this->setup_done_ = false;
-    return;
   }
 
   // Cleanup expired packets
@@ -216,7 +216,7 @@ void BleAdvProxy::loop() {
 // We let the configuration of the scanning to esp32_ble_tracker, towards with stop / start
 // We only gather directly the raw events
 void BleAdvProxy::gap_scan_event_handler(const esp32_ble::BLEScanResult &sr) {
-  if (this->setup_done_ && sr.adv_data_len <= MAX_PACKET_LEN && sr.adv_data_len >= MIN_VIABLE_PACKET_LEN) {
+  if (sr.adv_data_len <= MAX_PACKET_LEN && sr.adv_data_len >= MIN_VIABLE_PACKET_LEN) {
     if (xSemaphoreTake(this->scan_result_lock_, 5L / portTICK_PERIOD_MS)) {
       this->recv_packets_.emplace_back(sr);
       xSemaphoreGive(this->scan_result_lock_);
