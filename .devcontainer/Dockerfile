@@ -1,4 +1,4 @@
-FROM ghcr.io/esphome/esphome:2025.12.6
+FROM ghcr.io/esphome/esphome:2026.1.4
 ARG USERNAME=esphome
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
