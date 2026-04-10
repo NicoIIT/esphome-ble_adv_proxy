@@ -31,7 +31,7 @@ def load_yaml_override(fname: str, clear_secrets: bool = True) -> Any:
     wsk = get_wsk_folder(".")
     gs = run_git_command(["git", "config", "--get", "remote.origin.url"], wsk)
     main_esphome._LOGGER.info(gs)
-    for comp in conf["external_components"]:
+    for comp in conf.get("external_components", []):
         src = comp["source"]
         if (isinstance(src, str) and src == f"github://{gs[19:]}") or (
             isinstance(src, dict) and src["type"] == "git" and src["url"] == gs
