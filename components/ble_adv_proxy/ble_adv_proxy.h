@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esphome/core/component.h"
+#include "esphome/core/version.h"
 #include "esphome/components/esp32_ble/ble.h"
 #include "esphome/components/api/custom_api_device.h"
 #include "esphome/components/text_sensor/text_sensor.h"
@@ -32,15 +33,26 @@ class BleAdvParam {
 /**
   BleAdvProxy:
  */
+#if ESPHOME_VERSION_CODE >= VERSION_CODE(2026, 4, 0)
+class BleAdvProxy : public Component, public Parented<esp32_ble::ESP32BLE>, public api::CustomAPIDevice {
+#else
 class BleAdvProxy : public Component,
                     public esp32_ble::GAPScanEventHandler,
                     public Parented<esp32_ble::ESP32BLE>,
                     public api::CustomAPIDevice {
+#endif
  public:
   // component handling
   void setup() override;
   void loop() override;
   void dump_config() override;
+
+  // Scanner registration
+#if ESPHOME_VERSION_CODE >= VERSION_CODE(2026, 4, 0)
+  void gap_scan_event_handler(const esp32_ble::BLEScanResult &scan_result);
+#else
+  void gap_scan_event_handler(const esp32_ble::BLEScanResult &scan_result) override;
+#endif
 
   void set_use_max_tx_power(bool use_max_tx_power) { this->use_max_tx_power_ = use_max_tx_power; }
   void set_sensor_name(text_sensor::TextSensor *sens, const std::string &adapter_name) {
@@ -79,7 +91,6 @@ class BleAdvProxy : public Component,
   /**
     Listening to ADV
    */
-  void gap_scan_event_handler(const esp32_ble::BLEScanResult &scan_result) override;
   SemaphoreHandle_t scan_result_lock_;
   uint32_t dupe_ignore_duration_ = 20000;
   std::list<esp32_ble::BLEScanResult> recv_packets_;
