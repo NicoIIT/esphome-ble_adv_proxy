@@ -46,7 +46,7 @@ except BaseException:
 # End of workaround
 
 
-AUTO_LOAD = ["esp32_ble", "esp32_ble_tracker", "api", "text_sensor"]
+AUTO_LOAD = ["esp32_ble", "esp32_ble_tracker", "bluetooth_proxy", "api", "text_sensor"]
 DEPENDENCIES = ["esp32", "api"]
 MULTI_CONF = False
 

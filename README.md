@@ -24,7 +24,6 @@ ble_adv_proxy:
   #   and will require you to update the reconfiguring -> Technical Parameters (see ha-ble-adv doc)
   # The name MUST be unique for HA: if you have several proxies linked to a HA instance,
   #   they MUST all have different names
-  # This option requires ha-ble-adv v1.2.1 minimum
   # adapter_name: esp-proxy
 
 external_components:
@@ -38,7 +37,10 @@ api:
   homeassistant_services: true
 ```
 
-It can also be used with an existing config including ble_adv_manager / ble_adv_remote / ble_adv_controller, this will ease migrations from those components to the HA integration.
+For convenience prupose, the `ble_adv_proxy` component tries to automatically add them using a hack, but one day it may no more work, so better have them directly in the config. It also installs automatically the following other components if not already done in the config:
+* bluetooth_proxy
+* esp32_ble
+* esp32_ble_tracker
 
 ## Variables
 The following variables are available:

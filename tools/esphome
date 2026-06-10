@@ -11,7 +11,8 @@ import os
 import sys
 from typing import Any
 
-from esphome import platformio_api, yaml_util
+# from esphome import platformio_api, yaml_util
+from esphome import yaml_util
 import esphome.__main__ as main_esphome
 from esphome.core import CORE, TimePeriod
 from esphome.git import run_git_command
@@ -30,6 +31,7 @@ def load_yaml_override(fname: str, clear_secrets: bool = True) -> Any:
     comp_folder = get_wsk_folder("components")
     wsk = get_wsk_folder(".")
     gs = run_git_command(["git", "config", "--get", "remote.origin.url"], wsk)
+    gs = gs[:-4] if gs[-4:] == ".git" else gs
     main_esphome._LOGGER.info(gs)
     for comp in conf.get("external_components", []):
         src = comp["source"]
@@ -51,27 +53,27 @@ yaml_util.load_yaml = load_yaml_override
 #############################################
 ## Override compile action
 #############################################
-def compile_program_override(args, conf):
-    main_esphome._LOGGER.info("Compiling app...")
-    rc = platformio_api.run_compile(conf, CORE.verbose)
-    if rc != 0:
-        return rc
-    idedata = platformio_api.get_idedata(conf)
-    if idedata is not None:
-        vscode_folder = get_wsk_folder(".vscode")
-        os.makedirs(vscode_folder, exist_ok=True)
-        with open(
-            os.path.join(vscode_folder, "c_cpp_properties.json"), "w"
-        ) as output_json:
-            json.dump(convert_pio_to_vscode(idedata.raw), output_json, indent=4)
-        main_esphome._LOGGER.info(
-            f"Override Feature 2: vscode C++ Configuration '{idedata.raw['env_name']}' refreshed."
-        )
-        return 0
-    return 1
+# def compile_program_override(args, conf):
+#     main_esphome._LOGGER.info("Compiling app...")
+#     rc = platformio_api.run_compile(conf, CORE.verbose)
+#     if rc != 0:
+#         return rc
+#     idedata = platformio_api.get_idedata(conf)
+#     if idedata is not None:
+#         vscode_folder = get_wsk_folder(".vscode")
+#         os.makedirs(vscode_folder, exist_ok=True)
+#         with open(
+#             os.path.join(vscode_folder, "c_cpp_properties.json"), "w"
+#         ) as output_json:
+#             json.dump(convert_pio_to_vscode(idedata.raw), output_json, indent=4)
+#         main_esphome._LOGGER.info(
+#             f"Override Feature 2: vscode C++ Configuration '{idedata.raw['env_name']}' refreshed."
+#         )
+#         return 0
+#     return 1
 
 
-main_esphome.compile_program = compile_program_override
+# main_esphome.compile_program = compile_program_override
 
 
 def convert_pio_to_vscode(input_data):
