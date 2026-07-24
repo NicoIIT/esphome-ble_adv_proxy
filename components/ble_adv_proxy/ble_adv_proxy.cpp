@@ -91,13 +91,13 @@ void BleAdvProxy::on_advertise_v1(std::string raw, float duration, float repeat,
   uint8_t int_repeat = uint8_t(repeat);
   uint32_t int_duration = uint32_t(duration);
   uint32_t int_ign_duration = uint32_t(ign_duration);
-  ESP_LOGD(TAG, "send adv - %s, duration %dms, repeat: %d", raw.c_str(), int_duration, int_repeat);
+  ESP_LOGD(TAG, "send adv - %s, duration %ldms, repeat: %d", raw.c_str(), int_duration, int_repeat);
   for (uint8_t i = 0; i < int_repeat; ++i) {
     this->send_packets_.emplace_back(raw, int_duration);
   }
   // Prevent ignored packets from being re sent to HA host in case received
   for (auto &ignored_adv : ignored_advs) {
-    // ESP_LOGD(TAG, "Ignoring ADV for %ds: %s", int_ign_duration / 1000, ignored_adv.c_str());
+    // ESP_LOGD(TAG, "Ignoring ADV for %lds: %s", int_ign_duration / 1000, ignored_adv.c_str());
     this->check_add_dupe_packet(BleAdvParam(ignored_adv, millis() + int_ign_duration));
   }
 }
