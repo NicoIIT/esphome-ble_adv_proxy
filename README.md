@@ -48,13 +48,13 @@ The following variables are available:
 - **adapter_name** (Optional, Default: the node name): The name of the adapter, defaulting to the name of the node if not provided.
 
 ## FAQ
-### I have a lot of warnings from esp32_ble_tracker, but I did not even add this component! How can I get ride of them ?
+### I have a lot of warnings from esp32_ble_tracker, but I did not even add this component! How can I get rid of them ?
 ```
 [23:09:41][W][esp32_ble_tracker:125]: Too many BLE events to process. Some devices may not show up.
 [23:09:41][W][esp32_ble_tracker:125]: Too many BLE events to process. Some devices may not show up.
 ```
 The `esp32_ble_tracker` is forced included by this component in order to handle the scanning part, it is also included in default Bluetooth Proxy config.
-Still the default scan parameters defined in this component may not be accurate to handle the needs of our devices that publish a LOT of Advertising messages in a short amount of time. You can decrease them in order to get ride of the warnings by defining the esp32_ble_tracker and its scan parameters:
+Still the default scan parameters defined in this component may not be accurate to handle the needs of our devices that publish a LOT of Advertising messages in a short amount of time. You can decrease them in order to get rid of the warnings by defining the esp32_ble_tracker and its scan parameters:
 
 ```yaml
 esp32_ble_tracker:
