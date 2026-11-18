@@ -1,4 +1,5 @@
 #include "ble_adv_proxy.h"
+#include <cstdio>
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
 #include <esp_err.h>
@@ -118,11 +119,19 @@ bool BleAdvProxy::check_add_dupe_packet(BleAdvParam &&packet) {
 }
 
 std::string get_str_mac(const uint8_t *mac) {
-  return str_snprintf("%02X:%02X:%02X:%02X:%02X:%02X", 17, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  char buf[18];
+  snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return std::string(buf);
 }
 
 void BleAdvProxy::on_raw_recv(const BleAdvParam &param, const std::string &str_mac) {
-  std::string raw = esphome::format_hex(param.buf_, param.len_);
+  std::string raw;
+  raw.reserve(param.len_ * 2);
+  for (size_t i = 0; i < param.len_; i++) {
+    char hx[3];
+    snprintf(hx, sizeof(hx), "%02x", param.buf_[i]);
+    raw += hx;
+  }
   ESP_LOGD(TAG, "[%s] recv raw - %s", str_mac.c_str(), raw.c_str());
   if (!this->is_connected() || !this->setup_done_) {
     ESP_LOGD(TAG, "Connection to HA not ready, received adv ignored.");
