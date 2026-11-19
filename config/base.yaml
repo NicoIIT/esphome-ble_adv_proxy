@@ -8,6 +8,8 @@ esp32:
 
 esphome:
   name: esp32-idf
+  build_flags:
+    - -Werror
 
 network: # needed by api, itself needed by ble_adv_proxy
 

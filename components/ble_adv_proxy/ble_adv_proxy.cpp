@@ -118,10 +118,6 @@ bool BleAdvProxy::check_add_dupe_packet(BleAdvParam &&packet) {
   return true;
 }
 
-std::string get_str_mac(const uint8_t *mac) {
-  return str_snprintf("%02X:%02X:%02X:%02X:%02X:%02X", 17, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-}
-
 void BleAdvProxy::on_raw_recv(const BleAdvParam &param, const std::string &str_mac) {
   std::string raw = esphome::format_hex(param.buf_, param.len_);
   ESP_LOGD(TAG, "[%s] recv raw - %s", str_mac.c_str(), raw.c_str());
@@ -182,7 +178,7 @@ void BleAdvProxy::loop() {
   // - is dupe of previously received
   for (auto &sr : new_packets) {
     uint16_t cid = (sr.ble_adv[3] << 8) + sr.ble_adv[2];
-    std::string str_mac = get_str_mac(sr.bda);
+    std::string str_mac = esphome::format_mac_address_pretty(sr.bda);
     if (std::find(this->ign_cids_.begin(), this->ign_cids_.end(), cid) == this->ign_cids_.end() &&
         std::find(this->ign_macs_.begin(), this->ign_macs_.end(), str_mac) == this->ign_macs_.end() &&
         this->check_add_dupe_packet(
