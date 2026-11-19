@@ -1,6 +1,7 @@
 #include "ble_adv_proxy.h"
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
+#include "esphome/core/alloc_helpers.h"
 #include <esp_err.h>
 #include <esp_bt.h>
 #include <esp_bt_device.h>

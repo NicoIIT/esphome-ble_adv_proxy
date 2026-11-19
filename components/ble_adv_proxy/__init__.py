@@ -79,7 +79,8 @@ CONFIG_SCHEMA = cv.All(
     ),
     # Creation of esp32_ble::GAPScanEventHandler: 2025.6.2
     # API_CONF_HOMEASSISTANT_SERVICES: 2025.8.0
-    cv.require_esphome_version(2025, 8, 0),
+    # move of core/alloc_helpers.h: 2026.6.0
+    cv.require_esphome_version(2026, 6, 0),
 )
 
 
